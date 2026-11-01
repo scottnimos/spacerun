@@ -1,0 +1,49 @@
+{
+  "activationDelay" : 0.2,
+  "bindings" : {
+    "c" : {
+      "behavior" : "activate",
+      "kind" : "app",
+      "target" : "/System/Applications/Calendar.app"
+    },
+    "f" : {
+      "behavior" : "activate",
+      "kind" : "app",
+      "target" : "/System/Library/CoreServices/Finder.app"
+    },
+    "g" : {
+      "behavior" : "activate",
+      "kind" : "url",
+      "target" : "https://github.com"
+    },
+    "m" : {
+      "behavior" : "toggle",
+      "kind" : "app",
+      "target" : "/System/Applications/Music.app"
+    },
+    "n" : {
+      "behavior" : "toggle",
+      "kind" : "app",
+      "target" : "/System/Applications/Notes.app"
+    },
+    "s" : {
+      "behavior" : "toggle",
+      "kind" : "app",
+      "target" : "/Applications/Safari.app"
+    },
+    "t" : {
+      "behavior" : "toggle",
+      "kind" : "app",
+      "target" : "/System/Applications/Utilities/Terminal.app"
+    },
+    "w" : {
+      "behavior" : "activate",
+      "kind" : "url",
+      "target" : "https://en.wikipedia.org"
+    }
+  },
+  "disabledApps" : [
+
+  ],
+  "typingCooldown" : 0.2
+}
