@@ -7,6 +7,7 @@ struct LeaderState {
         var consume = false
         var replaySpaceDown = false
         var action: UInt16?
+        var help = false
     }
     var phase: Phase = .idle
     var began: Double = 0
@@ -24,7 +25,7 @@ struct LeaderState {
     }
 
     mutating func handle(code: UInt16, down: Bool, repeated: Bool = false,
-                         modified: Bool = false, now: Double, enabled: Bool = true,
+                         modified: Bool = false, help: Bool = false, now: Double, enabled: Bool = true,
                          cooldown: Double, delay: Double, bindings: Set<UInt16>) -> Decision {
         if !down, swallowed.remove(code) != nil { return Decision(consume: true) }
         if down, repeated, swallowed.contains(code) { return Decision(consume: true) }
@@ -47,6 +48,7 @@ struct LeaderState {
         guard down else { return Decision() }
         if phase == .active {
             swallowed.insert(code)
+            if help { return Decision(consume: true, help: !repeated) }
             return Decision(consume: true, action: !repeated && !modified ? (bindings.contains(code) ? code : nil) : nil)
         }
         if phase == .pending {
@@ -55,10 +57,11 @@ struct LeaderState {
                 swallowed.insert(code)
                 return Decision(consume: true)
             }
-            if enabled, !modified, !repeated, now - began >= delay, bindings.contains(code) {
+            // `help` is the overlay key (Space + ?), which may carry Shift.
+            if enabled, !repeated, now - began >= delay, help || (!modified && bindings.contains(code)) {
                 phase = .active
                 swallowed.insert(code)
-                return Decision(consume: true, action: code)
+                return Decision(consume: true, action: help ? nil : code, help: help)
             }
             lastTyping = now
             return flush()

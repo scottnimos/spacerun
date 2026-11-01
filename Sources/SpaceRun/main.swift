@@ -5,6 +5,7 @@ let help = """
 SpaceRun — hold Space, press a key, launch an app or URL.
 
   spacerun init                    Create a starter config
+  spacerun edit                    Open a window to edit shortcuts and settings
   spacerun run                     Run in foreground; Ctrl-C stops
   spacerun bind KEY app /path/App.app [--toggle|--previous]
   spacerun bind KEY url https://example.com
@@ -19,24 +20,26 @@ SpaceRun — hold Space, press a key, launch an app or URL.
   spacerun uninstall               Remove service and binary; keep config
 
 Settings: ~/.config/spacerun/config.json (reloaded automatically).
-Shortcuts use physical US/ANSI key positions. No GUI, updater, or telemetry.
+Hold Space and press ? to see all shortcuts.
+Shortcuts use physical US/ANSI key positions. No updater or telemetry.
 """
 
 func main() throws {
     let args = Array(CommandLine.arguments.dropFirst())
     guard let command = args.first else { print(help); return }
     if ["help", "--help", "-h"].contains(command) { print(help); return }
-    let known = ["init", "run", "bind", "unbind", "config", "check", "install", "permissions", "start", "stop", "status", "uninstall"]
+    let known = ["init", "edit", "run", "bind", "unbind", "config", "check", "install", "permissions", "start", "stop", "status", "uninstall"]
     guard known.contains(command) else { throw Failure("Unknown command '\(command)'. Use --help.") }
     // Read-only and service-management commands do not create a config as a side effect.
-    if ["init", "run", "bind", "unbind", "install"].contains(command) { try ConfigFile.initialize() }
+    if ["init", "edit", "run", "bind", "unbind", "install"].contains(command) { try ConfigFile.initialize() }
     switch command {
     case "init": print(ConfigFile.url.path)
     case "config": print(ConfigFile.url.path)
+    case "edit": try Editor.run()
     case "run":
         let config = try ConfigFile.read()
         _ = NSApplication.shared
-        NSApp.setActivationPolicy(.prohibited)
+        NSApp.setActivationPolicy(.accessory) // No Dock icon, but allowed to show the overlay.
         try Daemon(config: config).run()
     case "bind":
         guard args.count == 4 || (args.count == 5 && ["--toggle", "--previous"].contains(args[4]) && args[2] == "app"),

@@ -6,8 +6,9 @@ final class LeaderStateTests: XCTestCase {
 
     @discardableResult
     func event(_ code: UInt16, _ down: Bool = true, at time: Double,
-               modified: Bool = false, repeated: Bool = false, enabled: Bool = true) -> LeaderState.Decision {
-        state.handle(code: code, down: down, repeated: repeated, modified: modified, now: time,
+               modified: Bool = false, repeated: Bool = false, enabled: Bool = true,
+               help: Bool = false) -> LeaderState.Decision {
+        state.handle(code: code, down: down, repeated: repeated, modified: modified, help: help, now: time,
                      enabled: enabled, cooldown: 0.2, delay: 0.2, bindings: [3, 17])
     }
 
@@ -128,5 +129,25 @@ final class LeaderStateTests: XCTestCase {
         let data = Data(#"{"kind":"app","target":"/Applications/Test.app"}"#.utf8)
         let binding = try JSONDecoder().decode(Binding.self, from: data)
         XCTAssertEqual(binding.behavior, .activate)
+    }
+
+    func testHelpKeyShowsOverlayEvenWithShiftAndKeepsHoldActive() {
+        event(49, at: 1)
+        let help = event(44, at: 1.3, modified: true, help: true)
+        XCTAssertTrue(help.consume)
+        XCTAssertTrue(help.help)
+        XCTAssertNil(help.action)
+        XCTAssertFalse(event(44, at: 1.4, modified: true, repeated: true, help: true).help)
+        XCTAssertEqual(event(3, at: 1.5).action, 3)
+        XCTAssertTrue(event(49, false, at: 1.6).consume)
+        XCTAssertTrue(event(44, false, at: 1.7).consume)
+    }
+
+    func testEarlyHelpKeyTypesNormally() {
+        event(49, at: 1)
+        let early = event(44, at: 1.05, modified: true, help: true)
+        XCTAssertFalse(early.help)
+        XCTAssertTrue(early.replaySpaceDown)
+        XCTAssertFalse(early.consume)
     }
 }

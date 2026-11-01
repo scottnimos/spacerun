@@ -84,7 +84,11 @@ enum ConfigFile {
     }
 
     static func read() throws -> Configuration {
-        let config = try JSONDecoder().decode(Configuration.self, from: Data(contentsOf: url))
+        try decode(Data(contentsOf: url))
+    }
+
+    static func decode(_ data: Data) throws -> Configuration {
+        let config = try JSONDecoder().decode(Configuration.self, from: data)
         try config.validate()
         return config
     }

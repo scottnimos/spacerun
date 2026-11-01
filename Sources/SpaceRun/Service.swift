@@ -52,17 +52,40 @@ enum Service {
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: definition, format: .xml, options: 0)
         try data.write(to: plist, options: .atomic)
-        print("Installed: \(executable.path)\nConfig: \(ConfigFile.url.path)\nNext: \(executable.path) permissions\nThen: \(executable.path) start")
+        print("Installed: \(executable.path)\nConfig: \(ConfigFile.url.path)\nNext: \(executable.path) start  (asks for Accessibility access on first run)")
     }
 
     static func start() throws {
         guard FileManager.default.fileExists(atPath: plist.path) else { throw Failure("Run 'spacerun install' first.") }
+        let logStart = (try? FileManager.default.attributesOfItem(atPath: logFile.path)[.size] as? UInt64) ?? 0
         if try loaded() {
             try command("/bin/launchctl", ["kickstart", "-k", identifier])
         } else {
             try command("/bin/launchctl", ["bootstrap", domain, plist.path])
         }
-        print("Start requested. Use 'spacerun status' to check; errors go to \(logFile.path)")
+        // Give the service a moment, then report what it actually did rather than just "requested".
+        var output = ""
+        for _ in 0..<20 {
+            Thread.sleep(forTimeInterval: 0.1)
+            output = newLog(since: logStart)
+            if output.contains("Running.") || output.contains("Waiting for Accessibility") || output.contains("Error:") { break }
+        }
+        let running = try command("/bin/launchctl", ["print", identifier], checked: false).1
+            .split(separator: "\n").contains { $0.trimmingCharacters(in: .whitespaces) == "state = running" }
+        if !output.isEmpty { print(output.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        if output.contains("Waiting for Accessibility") {
+            print("Grant access in the System Settings prompt; SpaceRun starts by itself once enabled. If spacerun is not listed, click +, press Cmd-Shift-G, and enter:\n\(executable.path)")
+        } else if !running {
+            throw Failure("SpaceRun is not running. See \(logFile.path)")
+        }
+    }
+
+    private static func newLog(since offset: UInt64) -> String {
+        guard let handle = try? FileHandle(forReadingFrom: logFile) else { return "" }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: offset <= size ? offset : 0) // Log was truncated: read it all.
+        return String(decoding: (try? handle.readToEnd()) ?? Data(), as: UTF8.self)
     }
 
     static func stop() throws {

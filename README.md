@@ -1,103 +1,150 @@
 # SpaceRun
 
-A small macOS command-line launcher. Hold Space, press a bound key, and open an app or a web link. Links open in your **system default browser**.
+A small macOS launcher. Hold **Space**, press a key, and an app or web link opens. Links open in your **system default browser**.
 
-Native Swift, system frameworks only. No Dock icon, menu bar icon, GUI, accounts, licensing, usage counters, telemetry, updater, or application-owned network requests. Browser shortcuts intentionally open websites. There are no third-party package dependencies and no idle polling timers.
+- Hold Space and press **?** to see all your shortcuts.
+- Run `spacerun edit` to change them in a window, or edit the JSON / use the CLI.
+- Runs as a background service that starts at login. No Dock icon or menu bar icon.
 
-## Build and install
+Native Swift, system frameworks only: no third-party dependencies, accounts, licensing, usage counters, telemetry, updater, or network requests of its own (browser shortcuts open websites, as intended). Idle, it uses 0% CPU and about 16 MB of memory (SpaceLauncher measured about 47 MB on the same machine).
 
-Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools).
+## Setup
+
+Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools). No administrator access is needed.
+
+1. **Quit SpaceLauncher** (or any other Space-key launcher) so the two do not fight over Space.
+2. Build, install, and start:
+
+   ```sh
+   swift build -c release
+   .build/release/spacerun install
+   ~/.local/bin/spacerun start
+   ```
+
+3. **Grant Accessibility access.** On first start, macOS asks for it. Enable `spacerun` in System Settings → Privacy & Security → Accessibility. SpaceRun starts working within a second; no restart is needed.
+   - If `spacerun` is not in the list, click **+**, press **Cmd-Shift-G**, and enter `~/.local/bin/spacerun`.
+   - If it still does not work, also enable it under **Input Monitoring**.
+   - `spacerun permissions` opens the settings page again at any time.
+4. Optional: add `~/.local/bin` to your shell's `PATH` so you can type just `spacerun`.
+
+`install` copies the binary to `~/.local/bin/spacerun`, signs it locally, creates a default config if you do not have one, and registers it to start at login. `start` tells you whether the service is running, waiting for permission, or failed.
+
+**Updating:** pull or edit the code, then repeat step 2. macOS may ask for Accessibility access again after a reinstall, because the binary changed; `start` will wait for it.
+
+## Using it
+
+| Action | What happens |
+|---|---|
+| Hold Space, press a bound key | Opens the app or link. Keep holding Space to fire more shortcuts. |
+| Hold Space, press **?** | Shows the cheat sheet overlay with every shortcut and its icon. Press a key to launch from it; release Space, press Escape, or press ? again to hide it. `/` without Shift works too, unless you have bound `/` yourself. |
+| Hold Space, press Escape | Cancels; no space is typed. |
+| Tap Space / type normally | Types a space as usual. |
+
+Hold Space for about 200 ms before pressing the key. A quicker key is treated as normal typing.
+
+## Changing shortcuts
+
+### In the editor window
 
 ```sh
-swift build -c release
-.build/release/spacerun install
-~/.local/bin/spacerun permissions
+spacerun edit
 ```
 
-In System Settings → Privacy & Security → Accessibility, enable `spacerun`. If it is missing, click **+**, press **Cmd-Shift-G**, and enter `~/.local/bin/spacerun`. macOS may attribute a foreground invocation to its terminal app; the background service needs the installed executable's access. If event-tap creation still fails, check Input Monitoring too.
+Each row is one shortcut: pick the key, choose **App** or **URL**, choose the app (Choose… opens a file picker) or type the URL, and pick what happens if the app is already in front:
 
-Quit SpaceLauncher so both programs do not intercept the same key. Then:
+- **Just open**: bring it to the front (default).
+- **Hide**: hide it if it is already in front, otherwise open it.
+- **Go back**: return to the previous app if it is already in front (used for iPhone Mirroring).
 
-```sh
-~/.local/bin/spacerun start
-~/.local/bin/spacerun status
-```
+Below the list you can tune the timing and add apps where Space should be left alone (for example a game or a terminal). Press **Save** or Cmd-S; the running service picks up the change immediately. Duplicate keys are outlined in red and cannot be saved. Closing with unsaved changes asks first.
 
-The service runs independently of your terminal and starts at login. `install` registers its login-startup file and copies/ad-hoc-signs the executable at a stable path; it does not start the service immediately. Rebuilding/reinstalling may require granting Accessibility access again. No administrator access is needed.
-
-Optional: add `~/.local/bin` to your shell's PATH to use just `spacerun`.
-
-## Your bindings
-
-The initial config contains a few example shortcuts. A copy is included in [config.example.json](config.example.json). The live file is:
-
-```text
-~/.config/spacerun/config.json
-```
-
-For example, this opens Outlook in your default browser:
-
-```json
-"e": {
-  "kind": "url",
-  "target": "https://outlook.office.com/mail/"
-}
-```
-
-An app binding:
-
-```json
-"s": {
-  "kind": "app",
-  "target": "/Applications/Slack.app",
-  "behavior": "toggle"
-}
-```
-
-`behavior` is optional and defaults to `activate`. `toggle` hides the app when it is frontmost, otherwise launches/focuses it. `previous` switches from the frontmost target app to the previously active app without hiding the target. If no previous app is known yet, it hides the target as a fallback. This is used for iPhone Mirroring.
-
-Edit and save the JSON, or use the CLI:
+### From the command line
 
 ```sh
 spacerun bind e url 'https://outlook.office.com/mail/'
 spacerun bind s app '/Applications/Slack.app' --toggle
 spacerun bind p app '/System/Applications/iPhone Mirroring.app' --previous
 spacerun unbind e
-spacerun check
+spacerun check            # validate config and that each app exists
 ```
 
-Changes reload automatically, including atomic editor saves. Invalid JSON/settings leave the last valid configuration active and write an error to the log. `check` also verifies app paths. `init` and `install` preserve an existing config.
+### In the JSON file
+
+The config lives at `~/.config/spacerun/config.json` (`spacerun config` prints the path). A copy of the default is in [config.example.json](config.example.json).
+
+```json
+{
+  "activationDelay": 0.2,
+  "typingCooldown": 0.2,
+  "disabledApps": ["com.apple.Terminal"],
+  "bindings": {
+    "e": { "kind": "url", "target": "https://outlook.office.com/mail/" },
+    "s": { "kind": "app", "target": "/Applications/Slack.app", "behavior": "toggle" }
+  }
+}
+```
+
+- `kind`: `app` (absolute path to a `.app`) or `url` (`http`/`https`).
+- `behavior` (apps only, optional): `activate` (default), `toggle`, or `previous`, matching Just open / Hide / Go back above.
+- `disabledApps`: bundle IDs where Space is never intercepted.
+- Keys are letters, digits, and `` ` - = [ ] \ ; ' , . / `` by physical US/ANSI position, so they do not change with input language or Caps Lock.
+
+Every save reloads automatically, including editors that save by replacing the file. If the file is invalid, the last valid configuration stays active and the error is written to the log.
 
 ## Typing behavior
 
-- `typingCooldown: 0.2`: Space behaves normally if you have typed within the last 200 ms.
-- `activationDelay: 0.2`: hold Space for at least 200 ms before pressing the shortcut key.
-- A tapped Space is replayed on release. A hold with no shortcut produces one space; it does not repeat spaces.
-- An early or unassigned key replays Space before forwarding the key, preserving typing order.
-- Command/Control/Option/Shift/Fn + Space passes through. A modifier or mouse press while awaiting a shortcut also forwards the held Space, allowing Space-drag gestures.
-- A recognised shortcut consumes Space and the trigger key, including key repeat and key release. More shortcuts can be used during the same hold. Escape consumes the hold without typing a space.
-- Keys use physical US/ANSI positions; Caps Lock does not change the bindings.
-- Set `disabledApps` to bundle IDs (e.g. `["com.apple.Terminal"]`) to leave Space alone in those apps. macOS secure input can prevent interception, such as in password fields.
+- `activationDelay` (default 0.2 s): how long Space must be held before a shortcut key counts.
+- `typingCooldown` (default 0.2 s): if you typed within this time, Space behaves completely normally, so fast typing is never affected.
+- A tapped Space is typed when you release it. Holding Space with no shortcut types one space; it does not auto-repeat.
+- An early or unbound key types the space first and then the key, so typing order is preserved.
+- Command/Control/Option/Shift/Fn + Space passes straight through. Pressing Command/Control/Option/Fn or clicking the mouse while holding Space also releases the held space (so Space-drag gestures work). Shift on its own does not, which is what makes Space + ? possible; Shift + a letter still types the space first.
+- After a shortcut, Space and the shortcut key (including its repeat and release) are swallowed.
+- macOS secure input (for example password fields) can stop interception; Space then just types normally.
 
-Space presses that may be shortcuts are necessarily delayed until the next key or Space release. Tune the two delays in JSON to suit your typing.
+Because a held Space might become a shortcut, the space appears when you release it or press the next key. If that feels slow, lower the delays.
 
-## Manage the process
+## Managing the service
 
 ```sh
-spacerun run        # foreground mode; Ctrl-C to stop (stop the service first)
-spacerun start      # start/restart background service
-spacerun stop       # stop for this login; startup remains enabled next login
-spacerun status
-spacerun uninstall # stop and remove binary/login startup; keep config and logs
+spacerun start       # start or restart, and report whether it is running
+spacerun stop        # stop for now; it still starts at next login
+spacerun status      # show state, PID, and last exit code
+spacerun run         # run in the foreground instead (stop the service first); Ctrl-C to stop
+spacerun uninstall   # stop and remove the binary and login item; keeps config and log
+spacerun --help
 ```
 
-The service definition is `~/Library/LaunchAgents/local.spacerun.plist`. Logs are at `~/Library/Logs/SpaceRun.log`; keystrokes and usage history are not logged. There is a per-config lock to prevent duplicate instances. For isolated config testing, set `SPACERUN_CONFIG=/absolute/path/config.json`; an installation made with this variable remembers that config path.
+| File | Purpose |
+|---|---|
+| `~/.local/bin/spacerun` | Installed binary |
+| `~/.config/spacerun/config.json` | Your shortcuts and settings |
+| `~/Library/LaunchAgents/local.spacerun.plist` | Login startup definition |
+| `~/Library/Logs/SpaceRun.log` | Startup messages and errors; keystrokes and usage are never logged |
 
-## Verification
+A lock file next to the config prevents two copies from running at once. To test with a separate config, set `SPACERUN_CONFIG=/absolute/path/config.json`; an install made with this variable keeps using that path.
+
+## Troubleshooting
+
+- **Nothing happens when I hold Space:** run `spacerun status` and check the log. Make sure Accessibility (and if needed Input Monitoring) is enabled for `~/.local/bin/spacerun`, and that SpaceLauncher is not running.
+- **Stopped working after reinstalling:** macOS treats the rebuilt binary as new. Run `spacerun start` and re-enable it in Accessibility (remove the old entry with − first if it is stale).
+- **"Already running":** another copy is using the same config; `spacerun stop` or quit the foreground `spacerun run`.
+- **An app shortcut does nothing:** `spacerun check` lists any app paths that no longer exist.
+
+## Development
 
 ```sh
 swift test
 swift build -c release
 ```
 
-The tests cover normal Space, fast typing, activation delay, unknown keys, modified shortcuts, mouse/modifier passthrough policy, key release/repeat suppression, disabled apps, cancellation, and config validation. Native keyboard interception, focus changes, default-browser opening, and login startup also require a manual check after granting macOS permissions.
+The tests cover normal Space, fast typing, activation delay, unknown keys, modified shortcuts, the cheat sheet key, mouse/modifier passthrough, key release/repeat suppression, disabled apps, cancellation, config validation, and the editor's change tracking and save checks. Keyboard interception, the overlay, focus changes, default-browser opening, and login startup need a manual check with permissions granted.
+
+Source layout (`Sources/SpaceRun`):
+
+- `LeaderState.swift`: the Space-key state machine (pure logic, unit tested).
+- `Daemon.swift`: event tap, app launching, config reload, permission wait.
+- `Overlay.swift`: the Space + ? cheat sheet.
+- `Editor.swift`: the `spacerun edit` window.
+- `Configuration.swift`: config model, defaults, validation, and key map.
+- `Service.swift`: install/start/stop via launchd.
+- `main.swift`: command-line commands.
