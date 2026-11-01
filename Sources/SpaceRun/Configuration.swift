@@ -1,6 +1,6 @@
 import Foundation
 
-struct Binding: Codable {
+struct Binding: Codable, Equatable {
     enum Kind: String, Codable { case app, url }
     enum Behavior: String, Codable { case activate, toggle, previous }
     var kind: Kind
@@ -100,6 +100,9 @@ enum ConfigFile {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         try encoder.encode(config).write(to: url, options: .atomic)
     }
+
+    /// True while the config still has only the built-in example shortcuts.
+    static var isStarter: Bool { (try? read().bindings) == Configuration().bindings }
 
     static func initialize() throws {
         if !FileManager.default.fileExists(atPath: url.path) { try write(Configuration()) }

@@ -10,12 +10,14 @@ enum Editor {
         let app = NSApplication.shared
         app.setActivationPolicy(.regular)
         app.mainMenu = menu()
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 620),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700),
                               styleMask: [.titled, .closable, .miniaturizable, .resizable],
                               backing: .buffered, defer: false)
         window.title = "SpaceRun"
         window.minSize = NSSize(width: 640, height: 460)
-        window.contentView = NSHostingView(rootView: EditorView(model: model))
+        let host = NSHostingView(rootView: EditorView(model: model))
+        host.sizingOptions = [.minSize] // Keep the window at its own size; the list scrolls.
+        window.contentView = host
         let delegate = EditorDelegate(model: model)
         window.delegate = delegate
         app.delegate = delegate
@@ -100,6 +102,9 @@ final class EditorModel: ObservableObject {
     @Published var disabledApps: [String] = []
     @Published var message: (text: String, isError: Bool)?
     private var saved: Configuration
+    /// Shown until the user saves their own shortcuts or dismisses it.
+    @Published var showWelcome: Bool
+    let serviceRunning = (try? Service.loaded()) ?? false
     private var icons: [String: NSImage] = [:]
 
     static let keys = KeyMap.codes.keys.sorted { a, b in
@@ -110,6 +115,7 @@ final class EditorModel: ObservableObject {
 
     init(config: Configuration) {
         saved = config
+        showWelcome = config.bindings == Configuration().bindings
         load(config)
     }
 
@@ -163,7 +169,9 @@ final class EditorModel: ObservableObject {
             let config = current
             try ConfigFile.write(config)
             saved = config
-            message = ("Saved. SpaceRun reloads it automatically.", false)
+            showWelcome = false
+            message = (serviceRunning ? "Saved. SpaceRun reloads it automatically."
+                                      : "Saved. Run 'spacerun start' to use your shortcuts.", false)
             return true
         } catch {
             message = (error.localizedDescription, true)
@@ -199,6 +207,14 @@ struct EditorView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if model.showWelcome { welcome }
+            if !model.serviceRunning {
+                Label("SpaceRun isn’t running, so shortcuts won’t work yet. Start it with “spacerun start” in Terminal.",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.top, 12)
+            }
             HStack {
                 Text("Shortcuts").font(.headline)
                 Text("Hold Space, then press the key. Space + ? shows them all.")
@@ -214,6 +230,7 @@ struct EditorView: View {
                 }
             }
             .listStyle(.inset(alternatesRowBackgrounds: true))
+            .frame(minHeight: 160)
 
             Divider()
             settings.padding(16)
@@ -234,6 +251,25 @@ struct EditorView: View {
             }
             .padding(16)
         }
+    }
+
+    private var welcome: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "keyboard").font(.system(size: 24)).foregroundStyle(.tint).frame(width: 34)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Welcome to SpaceRun").font(.headline)
+                Text("Hold **Space**, then press a key to open an app or website. Hold Space and press **?** to see all your shortcuts.")
+                Text("The shortcuts below are examples. Change them, delete them, or click **Add**, then **Save**. Choose an app with **Choose…**, or switch a row to **URL** for a website.")
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button { model.showWelcome = false } label: { Image(systemName: "xmark") }
+                .buttonStyle(.borderless)
+                .help("Hide")
+        }
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.accentColor.opacity(0.1)))
+        .padding([.horizontal, .top], 16)
     }
 
     private var settings: some View {

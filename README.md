@@ -25,9 +25,16 @@ Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools). No administ
    - If `spacerun` is not in the list, click **+**, press **Cmd-Shift-G**, and enter `~/.local/bin/spacerun`.
    - If it still does not work, also enable it under **Input Monitoring**.
    - `spacerun permissions` opens the settings page again at any time.
-4. Optional: add `~/.local/bin` to your shell's `PATH` so you can type just `spacerun`.
+4. **Make it yours.** SpaceRun starts with a few example shortcuts (Calendar, Finder, Music, Notes, Safari, Terminal, github.com, wikipedia.org). Open the editor to replace them with your own:
 
-`install` copies the binary to `~/.local/bin/spacerun`, signs it locally, creates a default config if you do not have one, and registers it to start at login. `start` tells you whether the service is running, waiting for permission, or failed.
+   ```sh
+   ~/.local/bin/spacerun edit
+   ```
+
+   A welcome note explains the basics. Change a row's key, choose an app with **Choose…** or switch it to **URL**, delete the examples you do not want, and press **Save**. The running service picks up changes immediately, so you can try them straight away. Hold Space and press **?** at any time to see what is bound.
+5. Optional: add `~/.local/bin` to your shell's `PATH` so you can type just `spacerun`.
+
+`install` copies the binary to `~/.local/bin/spacerun`, signs it locally, creates the example config if you do not have one (an existing config is never overwritten), and registers it to start at login. It then prints the next two steps. While you still have only the example shortcuts, `start` reminds you to run `spacerun edit`. `start` tells you whether the service is running, waiting for permission, or failed.
 
 **Updating:** pull or edit the code, then repeat step 2. macOS may ask for Accessibility access again after a reinstall, because the binary changed; `start` will wait for it.
 
@@ -50,7 +57,7 @@ Hold Space for about 200 ms before pressing the key. A quicker key is treated as
 spacerun edit
 ```
 
-Each row is one shortcut: pick the key, choose **App** or **URL**, choose the app (Choose… opens a file picker) or type the URL, and pick what happens if the app is already in front:
+On first use a welcome note explains the basics, and a warning appears if the SpaceRun service is not running. Each row is one shortcut: pick the key, choose **App** or **URL**, choose the app (Choose… opens a file picker) or type the URL, and pick what happens if the app is already in front:
 
 - **Just open**: bring it to the front (default).
 - **Hide**: hide it if it is already in front, otherwise open it.

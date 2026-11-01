@@ -4,6 +4,8 @@ import ApplicationServices
 let help = """
 SpaceRun — hold Space, press a key, launch an app or URL.
 
+Getting started: spacerun install, then spacerun start, then spacerun edit.
+
   spacerun init                    Create a starter config
   spacerun edit                    Open a window to edit shortcuts and settings
   spacerun run                     Run in foreground; Ctrl-C stops

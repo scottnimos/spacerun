@@ -52,7 +52,14 @@ enum Service {
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: definition, format: .xml, options: 0)
         try data.write(to: plist, options: .atomic)
-        print("Installed: \(executable.path)\nConfig: \(ConfigFile.url.path)\nNext: \(executable.path) start  (asks for Accessibility access on first run)")
+        print("""
+        Installed: \(executable.path)
+        Config:    \(ConfigFile.url.path)
+
+        Next:
+          1. \(executable.path) start   Start SpaceRun (asks for Accessibility access the first time)
+          2. \(executable.path) edit    Set up your own shortcuts
+        """)
     }
 
     static func start() throws {
@@ -77,6 +84,9 @@ enum Service {
             print("Grant access in the System Settings prompt; SpaceRun starts by itself once enabled. If spacerun is not listed, click +, press Cmd-Shift-G, and enter:\n\(executable.path)")
         } else if !running {
             throw Failure("SpaceRun is not running. See \(logFile.path)")
+        }
+        if ConfigFile.isStarter {
+            print("\nYou have the example shortcuts. Run '\(executable.path) edit' to set up your own.\nHold Space and press ? to see them all.")
         }
     }
 
