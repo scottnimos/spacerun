@@ -21,7 +21,7 @@ Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools). No administ
    ~/.local/bin/spacerun start
    ```
 
-3. **Grant Accessibility access.** On first start, macOS asks for it. Enable `spacerun` in System Settings → Privacy & Security → Accessibility. SpaceRun starts working within a second; no restart is needed.
+3. **Grant Accessibility access.** On first start, macOS asks for it. Enable `spacerun` in System Settings → Privacy & Security → Accessibility. Within a second SpaceRun restarts itself (macOS only applies the permission to a freshly started process) and starts working; you do not need to relaunch it.
    - If `spacerun` is not in the list, click **+**, press **Cmd-Shift-G**, and enter `~/.local/bin/spacerun`.
    - If it still does not work, also enable it under **Input Monitoring**.
    - `spacerun permissions` opens the settings page again at any time.

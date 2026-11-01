@@ -69,9 +69,7 @@ final class Daemon {
         if AXIsProcessTrusted() {
             do { try startTap() } catch { failure = error }
         } else {
-            waitForPermission { [weak self] in
-                do { try self?.startTap() } catch { failure = error; CFRunLoopStop(CFRunLoopGetMain()) }
-            }
+            waitForPermission { [weak self] in self?.relaunch() }
         }
         if failure == nil { CFRunLoopRun() }
         permissionTimer?.cancel()
@@ -87,8 +85,8 @@ final class Daemon {
         if let failure { throw failure }
     }
 
-    /// First run: prompt for Accessibility from this (installed) executable, then start once granted,
-    /// so the user does not have to restart the service. Checks once a second only until granted.
+    /// First run: prompt for Accessibility from this (installed) executable, then restart once granted,
+    /// so the user does not have to. Checks once a second only until granted.
     private func waitForPermission(then start: @escaping () -> Void) {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         log("Waiting for Accessibility permission. Enable spacerun in System Settings → Privacy & Security → Accessibility.")
@@ -98,11 +96,33 @@ final class Daemon {
             guard AXIsProcessTrusted() else { return }
             self?.permissionTimer?.cancel()
             self?.permissionTimer = nil
-            log("Accessibility permission granted.")
             start()
         }
         timer.resume()
         permissionTimer = timer
+    }
+
+    /// macOS only fully applies a new Accessibility grant to a freshly started process: an event tap
+    /// made by the process that was waiting may not see key events. So restart rather than continue.
+    private func relaunch() {
+        log("Accessibility permission granted. Restarting so macOS applies it.")
+        if ProcessInfo.processInfo.environment["XPC_SERVICE_NAME"] == Service.label {
+            // Under launchd: it sends SIGTERM (handled by stop()) and starts a new instance.
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            task.arguments = ["kickstart", "-k", Service.identifier]
+            if (try? task.run()) != nil { return }
+        }
+        // Foreground (or launchctl failed): replace this process with a fresh copy of itself.
+        Darwin.close(lockFD)
+        lockFD = -1
+        signal(SIGINT, SIG_DFL)
+        signal(SIGTERM, SIG_DFL)
+        let path = Bundle.main.executablePath ?? CommandLine.arguments[0]
+        var argv: [UnsafeMutablePointer<CChar>?] = CommandLine.arguments.map { strdup($0) } + [nil]
+        execv(path, &argv)
+        log("Could not restart (\(String(cString: strerror(errno)))). Run 'spacerun start'.")
+        exit(1)
     }
 
     private func startTap() throws {
