@@ -21,7 +21,14 @@ final class Daemon {
     private var previousApp: NSRunningApplication?
     private var boundCodes: Set<UInt16> = []
     private var lockFD: Int32 = -1
+    private var paused = false
+    private var editorObserver: NSObjectProtocol?
+    private let appDelegate = ServiceAppDelegate()
     private let overlay: Overlay
+    private lazy var menuBar = MenuBar(
+        paused: { [weak self] in self?.paused ?? false },
+        togglePause: { [weak self] in self?.togglePause() },
+        quit: { [weak self] in self?.stop() })
     private static let helpKey: UInt16 = 44 // The /? key.
     private static let marker: Int64 = 0x535041434552554E
 
@@ -36,6 +43,7 @@ final class Daemon {
         bindings = Dictionary(uniqueKeysWithValues: config.bindings.map { (KeyMap.codes[$0.key]!, $0.value) })
         boundCodes = Set(bindings.keys)
         overlay.update(config)
+        menuBar.setVisible(config.showMenuBarIcon)
         updateFrontApp()
     }
 
@@ -65,13 +73,19 @@ final class Daemon {
             source.resume()
             signals.append(source)
         }
+        // The menu bar icon and Finder's "open" need a normal app event loop.
+        NSApp.delegate = appDelegate
+        editorObserver = DistributedNotificationCenter.default().addObserver(
+            forName: Editor.showRequest, object: "\(getuid())", queue: .main
+        ) { note in EditorLauncher.open(settings: note.userInfo?["pane"] as? String == "settings") }
         var failure: Error?
         if AXIsProcessTrusted() {
             do { try startTap() } catch { failure = error }
         } else {
             waitForPermission { [weak self] in self?.relaunch() }
         }
-        if failure == nil { CFRunLoopRun() }
+        if failure == nil { NSApp.run() }
+        if let editorObserver { DistributedNotificationCenter.default().removeObserver(editorObserver) }
         permissionTimer?.cancel()
         pendingReload?.cancel()
         watcher?.cancel()
@@ -89,7 +103,7 @@ final class Daemon {
     /// so the user does not have to. Checks once a second only until granted.
     private func waitForPermission(then start: @escaping () -> Void) {
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
-        log("Waiting for Accessibility permission. Enable spacerun in System Settings → Privacy & Security → Accessibility.")
+        log("Waiting for Accessibility permission. Enable SpaceRun in System Settings → Privacy & Security → Accessibility.")
         let timer = DispatchSource.makeTimerSource(queue: .main)
         timer.schedule(deadline: .now() + 1, repeating: 1, leeway: .milliseconds(250))
         timer.setEventHandler { [weak self] in
@@ -160,7 +174,18 @@ final class Daemon {
             down.post(tap: .cgSessionEventTap)
             up.post(tap: .cgSessionEventTap)
         }
-        CFRunLoopStop(CFRunLoopGetMain())
+        NSApp.stop(nil)
+        // stop() takes effect after the next event, so post one.
+        if let wake = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: 0,
+                                         windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) {
+            NSApp.postEvent(wake, atStart: true)
+        }
+    }
+
+    private func togglePause() {
+        paused.toggle()
+        if paused { state.reset(); savedSpace = nil; overlay.hide() }
+        log(paused ? "Paused from the menu bar." : "Resumed from the menu bar.")
     }
 
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
@@ -194,7 +219,7 @@ final class Daemon {
         if type == .keyDown, code == 49, !repeated { savedSpace = event.copy() }
         let decision = state.handle(code: code, down: type == .keyDown, repeated: repeated,
                                     modified: !event.flags.intersection(flags).isEmpty, help: help,
-                                    now: Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9, enabled: !disabled,
+                                    now: Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW)) / 1e9, enabled: !disabled && !paused,
                                     cooldown: config.typingCooldown, delay: config.activationDelay,
                                     bindings: boundCodes)
         replay(decision, proxy: proxy)
@@ -292,6 +317,86 @@ final class Daemon {
         watcher.setCancelHandler { Darwin.close(fd) }
         watcher.resume()
         fileWatcher = watcher
+    }
+}
+
+/// Opening SpaceRun from Finder or Launchpad while the service runs shows the shortcuts window.
+private final class ServiceAppDelegate: NSObject, NSApplicationDelegate {
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        EditorLauncher.open()
+        return false
+    }
+}
+
+/// The optional menu bar icon (Settings > Show SpaceRun in the menu bar).
+final class MenuBar: NSObject, NSMenuDelegate {
+    private var item: NSStatusItem?
+    private let paused: () -> Bool
+    private let togglePause: () -> Void
+    private let quit: () -> Void
+    private let pauseItem = NSMenuItem(title: "Pause Shortcuts", action: #selector(pause), keyEquivalent: "")
+
+    init(paused: @escaping () -> Bool, togglePause: @escaping () -> Void, quit: @escaping () -> Void) {
+        self.paused = paused
+        self.togglePause = togglePause
+        self.quit = quit
+    }
+
+    func setVisible(_ visible: Bool) {
+        if visible, item == nil {
+            let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+            let image = NSImage(systemSymbolName: "space", accessibilityDescription: "SpaceRun")
+                ?? NSImage(systemSymbolName: "keyboard", accessibilityDescription: "SpaceRun")
+            image?.isTemplate = true
+            item.button?.image = image
+            item.button?.toolTip = "SpaceRun"
+            item.menu = makeMenu()
+            self.item = item
+        } else if !visible, let item {
+            NSStatusBar.system.removeStatusItem(item)
+            self.item = nil
+        }
+        updateIcon()
+    }
+
+    private func makeMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.delegate = self
+        func add(_ title: String, _ action: Selector, _ key: String = "") {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+            item.target = self
+            menu.addItem(item)
+        }
+        add("Edit Shortcuts…", #selector(edit))
+        add("Settings…", #selector(settings), ",")
+        menu.addItem(.separator())
+        pauseItem.target = self
+        menu.addItem(pauseItem)
+        menu.addItem(.separator())
+        add("Quit SpaceRun", #selector(quitService))
+        return menu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) { pauseItem.title = paused() ? "Resume Shortcuts" : "Pause Shortcuts" }
+
+    private func updateIcon() { item?.button?.appearsDisabled = paused() }
+
+    @objc private func edit() { EditorLauncher.open() }
+    @objc private func settings() { EditorLauncher.open(settings: true) }
+    @objc private func pause() { togglePause(); updateIcon() }
+    @objc private func quitService() {
+        // Let the menu close before asking.
+        DispatchQueue.main.async { [weak self] in self?.confirmQuit() }
+    }
+
+    private func confirmQuit() {
+        let alert = NSAlert()
+        alert.messageText = "Quit SpaceRun?"
+        alert.informativeText = "Your shortcuts stop working until you log in again or open SpaceRun."
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        if alert.runModal() == .alertFirstButtonReturn { quit() }
     }
 }
 

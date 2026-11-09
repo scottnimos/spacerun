@@ -7,7 +7,7 @@ SpaceRun — hold Space, press a key, launch an app or URL.
 Getting started: spacerun install, then spacerun start, then spacerun edit.
 
   spacerun init                    Create a starter config
-  spacerun edit                    Open a window to edit shortcuts and settings
+  spacerun edit [--settings]       Open the SpaceRun window (or its Settings)
   spacerun run                     Run in foreground; Ctrl-C stops
   spacerun bind KEY app /path/App.app [--toggle|--previous]
   spacerun bind KEY url https://example.com
@@ -28,13 +28,33 @@ Hold Space and press ? to see all shortcuts.
 Shortcuts use physical US/ANSI key positions. No updater or telemetry.
 """
 
+/// With the service running, ask it to open the window, so there is only ever one. Otherwise (or
+/// for a custom SPACERUN_CONFIG, which is not the service's) open it here. `--window` is how the
+/// service starts the window process.
+func edit(_ args: [String]) throws {
+    let settings = args.contains("--settings")
+    if !args.contains("--window"), Service.isRunning, !ConfigFile.isCustom {
+        DistributedNotificationCenter.default().postNotificationName(
+            Editor.showRequest, object: "\(getuid())", userInfo: settings ? ["pane": "settings"] : nil,
+            deliverImmediately: true)
+    } else {
+        try Editor.run(settings: settings)
+    }
+}
+
 func main() throws {
     let args = Array(CommandLine.arguments.dropFirst())
-    guard let command = args.first else { print(help); return }
+    guard let command = args.first else {
+        // Opened from Finder (no terminal): show the editor rather than help nobody can see.
+        if isatty(STDIN_FILENO) == 0 { try ConfigFile.initialize(); try edit([]) } else { print(help) }
+        return
+    }
     if ["help", "--help", "-h"].contains(command) { print(help); return }
     let known = ["init", "edit", "run", "bind", "unbind", "config", "check", "install", "permissions", "start", "stop", "status", "uninstall"]
     guard known.contains(command) else { throw Failure("Unknown command '\(command)'. Use --help.") }
     let allUsers = args.dropFirst().contains("--all-users")
+    let flags = Set(args.dropFirst().filter { $0.hasPrefix("--") })
+    if command == "edit", !flags.isSubset(of: ["--window", "--settings"]) { throw Failure("Usage: spacerun edit [--settings]") }
     if allUsers, !["install", "uninstall"].contains(command) { throw Failure("--all-users only applies to install and uninstall.") }
     if command == "run", ProcessInfo.processInfo.environment["SPACERUN_SELF_LOG"] != nil {
         // Shared launch agent: launchd cannot point at each user's home, so open this user's log here.
@@ -49,7 +69,7 @@ func main() throws {
     switch command {
     case "init": print(ConfigFile.url.path)
     case "config": print(ConfigFile.url.path)
-    case "edit": try Editor.run()
+    case "edit": try edit(args)
     case "run":
         let config = try ConfigFile.read()
         _ = NSApplication.shared
@@ -84,7 +104,7 @@ func main() throws {
     case "permissions":
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
-        print("Enable SpaceRun/spacerun in Accessibility. If absent, use + then Cmd-Shift-G and enter:\n\(Service.executable.path)\nThen run the installed executable with 'start'.")
+        print("Enable SpaceRun in Accessibility. If it is not listed, click + and choose:\n\(Service.app.path)\nThen run '\(Service.executable.path) start'.")
     case "start": try Service.start()
     case "stop": try Service.stop()
     case "status": try Service.status()

@@ -23,6 +23,7 @@ struct Configuration: Codable {
     var typingCooldown: Double = 0.2
     var activationDelay: Double = 0.2
     var disabledApps: [String] = []
+    var showMenuBarIcon = true
     var bindings: [String: Binding] = [
         "c": Binding(kind: .app, target: "/System/Applications/Calendar.app"),
         "f": Binding(kind: .app, target: "/System/Library/CoreServices/Finder.app"),
@@ -56,6 +57,19 @@ struct Configuration: Codable {
     }
 }
 
+extension Configuration {
+    /// Missing keys fall back to the defaults, so older config files keep working.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Configuration()
+        typingCooldown = try values.decodeIfPresent(Double.self, forKey: .typingCooldown) ?? defaults.typingCooldown
+        activationDelay = try values.decodeIfPresent(Double.self, forKey: .activationDelay) ?? defaults.activationDelay
+        disabledApps = try values.decodeIfPresent([String].self, forKey: .disabledApps) ?? defaults.disabledApps
+        showMenuBarIcon = try values.decodeIfPresent(Bool.self, forKey: .showMenuBarIcon) ?? defaults.showMenuBarIcon
+        bindings = try values.decodeIfPresent([String: Binding].self, forKey: .bindings) ?? defaults.bindings
+    }
+}
+
 enum KeyMap {
     // Physical ANSI key positions, so shortcuts stay predictable across input languages.
     static let codes: [String: UInt16] = [
@@ -66,6 +80,8 @@ enum KeyMap {
         "i":34, "p":35, "l":37, "j":38, "'":39, "k":40, ";":41, "\\":42,
         ",":43, "/":44, "n":45, "m":46, ".":47, "`":50
     ]
+    private static let names = Dictionary(uniqueKeysWithValues: codes.map { ($0.value, $0.key) })
+    static func name(for code: UInt16) -> String? { names[code] }
 }
 
 struct Failure: LocalizedError {
@@ -75,13 +91,19 @@ struct Failure: LocalizedError {
 }
 
 enum ConfigFile {
+    static var defaultURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/spacerun/config.json")
+    }
+
     static var url: URL {
         if let path = ProcessInfo.processInfo.environment["SPACERUN_CONFIG"] {
             return URL(fileURLWithPath: path).standardizedFileURL
         }
-        return FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/spacerun/config.json")
+        return defaultURL
     }
+
+    /// True when SPACERUN_CONFIG points somewhere other than the default (for testing).
+    static var isCustom: Bool { url.resolvingSymlinksInPath() != defaultURL.resolvingSymlinksInPath() }
 
     static func read() throws -> Configuration {
         try decode(Data(contentsOf: url))

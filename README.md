@@ -3,8 +3,8 @@
 A small macOS launcher. Hold **Space**, press a key, and an app or web link opens. Links open in your **system default browser**.
 
 - Hold Space and press **?** to see all your shortcuts.
-- Run `spacerun edit` to change them in a window, or edit the JSON / use the CLI.
-- Runs as a background service that starts at login. No Dock icon or menu bar icon.
+- Open SpaceRun to change them in a window, or edit the JSON / use the CLI.
+- Runs as a background service that starts at login. No Dock icon; the menu bar icon is optional.
 
 Native Swift, system frameworks only: no third-party dependencies, accounts, licensing, usage counters, telemetry, updater, or network requests of its own (browser shortcuts open websites, as intended). Idle, it uses 0% CPU and about 16 MB of memory (SpaceLauncher measured about 47 MB on the same machine).
 
@@ -22,7 +22,7 @@ Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools). No administ
    ```
 
 3. **Grant Accessibility access.** On first start, macOS asks for it. Enable `spacerun` in System Settings → Privacy & Security → Accessibility. Within a second SpaceRun restarts itself (macOS only applies the permission to a freshly started process) and starts working; you do not need to relaunch it.
-   - If `spacerun` is not in the list, click **+**, press **Cmd-Shift-G**, and enter `~/.local/bin/spacerun`.
+   - If SpaceRun is not in the list, click **+** and choose `SpaceRun` in your home folder's **Applications** folder (`~/Applications/SpaceRun.app`).
    - If it still does not work, also enable it under **Input Monitoring**.
    - `spacerun permissions` opens the settings page again at any time.
 4. **Make it yours.** SpaceRun starts with a few example shortcuts (Calendar, Finder, Music, Notes, Safari, Terminal, github.com, wikipedia.org). Open the editor to replace them with your own:
@@ -31,10 +31,10 @@ Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools). No administ
    ~/.local/bin/spacerun edit
    ```
 
-   A welcome note explains the basics. Change a row's key, choose an app with **Choose…** or switch it to **URL**, delete the examples you do not want, and press **Save**. The running service picks up changes immediately, so you can try them straight away. Hold Space and press **?** at any time to see what is bound.
-5. Optional: add `~/.local/bin` to your shell's `PATH` so you can type just `spacerun`.
+   Double-click a shortcut to change it, select the examples you do not want and press Delete, and click **+** to add your own. Changes save as you make them and work straight away. Hold Space and press **?** at any time to see what is bound.
+5. Open a new terminal window and you can type just `spacerun`. If `~/.local/bin` was not already on your `PATH`, `install` added one line to `~/.zshrc` (or `~/.bash_profile` for bash); `uninstall` removes it again.
 
-`install` copies the binary to `~/.local/bin/spacerun`, signs it locally, creates the example config if you do not have one (an existing config is never overwritten), and registers it to start at login. It then prints the next two steps. While you still have only the example shortcuts, `start` reminds you to run `spacerun edit`. `start` tells you whether the service is running, waiting for permission, or failed.
+`install` builds a small app, `~/Applications/SpaceRun.app` (with its icon, so it is easy to recognise in Privacy & Security), signs it locally, links `~/.local/bin/spacerun` to it, creates the example config if you do not have one (an existing config is never overwritten), and registers it to start at login. It then prints the next two steps. While you still have only the example shortcuts, `start` reminds you to run `spacerun edit`. `start` tells you whether the service is running, waiting for permission, or failed.
 
 ### Several users on one Mac
 
@@ -45,9 +45,11 @@ swift build -c release
 sudo .build/release/spacerun install --all-users
 ```
 
-This puts the binary in `/usr/local/bin/spacerun` and a login item in `/Library/LaunchAgents`, so SpaceRun starts in every user's login session. Each user has their own config (`~/.config/spacerun/config.json`, created on first start), lock file, and log (`~/Library/Logs/SpaceRun.log`). Each user then runs `/usr/local/bin/spacerun start` (or logs out and back in), followed by `/usr/local/bin/spacerun edit`. Allowing Accessibility needs an administrator password if the user is not an administrator. Remove a per-user install first (`~/.local/bin/spacerun uninstall`), because it takes priority for that user. To remove the all-users install: `sudo /usr/local/bin/spacerun uninstall --all-users`.
+This puts the app in `/Applications/SpaceRun.app`, links `/usr/local/bin/spacerun` to it (already on every user's `PATH`), and adds a login item in `/Library/LaunchAgents`, so SpaceRun starts in every user's login session. Each user has their own config (`~/.config/spacerun/config.json`, created on first start), lock file, and log (`~/Library/Logs/SpaceRun.log`). Each user then runs `/usr/local/bin/spacerun start` (or logs out and back in), followed by `/usr/local/bin/spacerun edit`. Allowing Accessibility needs an administrator password if the user is not an administrator. Remove a per-user install first (`~/.local/bin/spacerun uninstall`), because it takes priority for that user. To remove the all-users install: `sudo /usr/local/bin/spacerun uninstall --all-users`.
 
-**Updating:** pull or edit the code, then repeat step 2. macOS may ask for Accessibility access again after a reinstall, because the binary changed; `start` will wait for it.
+**Updating:** pull or edit the code, then repeat step 2. macOS may ask for Accessibility access again after a reinstall, because the app changed; `start` will wait for it.
+
+**Upgrading from an older SpaceRun** (before it was an app): run `install` as above, then remove the old `spacerun` entry from Privacy & Security → Accessibility with **−**. Older versions had no bundle ID, so that entry cannot be removed automatically.
 
 ## Using it
 
@@ -62,19 +64,22 @@ Hold Space for about 200 ms before pressing the key. A quicker key is treated as
 
 ## Changing shortcuts
 
-### In the editor window
+### In the SpaceRun window
 
-```sh
-spacerun edit
-```
+Open SpaceRun from Applications, choose **Edit Shortcuts…** from the menu bar icon, or run `spacerun edit`.
 
-On first use a welcome note explains the basics, and a warning appears if the SpaceRun service is not running. Each row is one shortcut: pick the key, choose **App** or **URL**, choose the app (Choose… opens a file picker) or type the URL, and pick what happens if the app is already in front:
+Each shortcut is one row: its key, the app or website, and what it does when the app is already in front. Changes save immediately and the service picks them up straight away, like System Settings; there is no Save button.
 
-- **Just open**: bring it to the front (default).
-- **Hide**: hide it if it is already in front, otherwise open it.
-- **Go back**: return to the previous app if it is already in front (used for iPhone Mirroring).
+- **Add:** click **+** (or File → New Shortcut, Cmd-N). Type the key to use with Space, then choose an app or enter a web address (`example.com` is fine). A key that is already used is pointed out before you can add it.
+- **Change:** double-click a row, or Control-click and choose **Edit…**.
+- **Delete:** select rows and press Delete or click **−**. Edit → Undo (Cmd-Z) brings them back.
+- **If already in front** (apps only): **Keep it in front** (default), **Hide it**, or **Go back to previous app** (handy for iPhone Mirroring).
 
-Below the list you can tune the timing and add apps where Space should be left alone (for example a game or a terminal). Press **Save** or Cmd-S; the running service picks up the change immediately. Duplicate keys are outlined in red and cannot be saved. Closing with unsaved changes asks first.
+**Settings** (the gear button, the menu bar icon, or Cmd-,) holds the menu bar icon switch, the timing, and apps where Space is left alone (for example a game).
+
+### Menu bar icon
+
+SpaceRun shows a Space-bar icon in the menu bar with **Edit Shortcuts…**, **Settings…**, **Pause Shortcuts**, and **Quit SpaceRun**. Hide it with Settings → **Show SpaceRun in the menu bar**; you can still open SpaceRun from Applications, or with `spacerun edit`. Quitting stops the shortcuts until you next log in or run `spacerun start`; closing the SpaceRun window does not.
 
 ### From the command line
 
@@ -105,6 +110,7 @@ The config lives at `~/.config/spacerun/config.json` (`spacerun config` prints t
 - `kind`: `app` (absolute path to a `.app`) or `url` (`http`/`https`).
 - `behavior` (apps only, optional): `activate` (default), `toggle`, or `previous`, matching Just open / Hide / Go back above.
 - `disabledApps`: bundle IDs where Space is never intercepted.
+- `showMenuBarIcon` (optional, default `true`): show the menu bar icon.
 - Keys are letters, digits, and `` ` - = [ ] \ ; ' , . / `` by physical US/ANSI position, so they do not change with input language or Caps Lock.
 
 Every save reloads automatically, including editors that save by replacing the file. If the file is invalid, the last valid configuration stays active and the error is written to the log.
@@ -128,25 +134,28 @@ spacerun start       # start or restart, and report whether it is running
 spacerun stop        # stop for now; it still starts at next login
 spacerun status      # show state, PID, and last exit code
 spacerun run         # run in the foreground instead (stop the service first); Ctrl-C to stop
-spacerun uninstall   # stop and remove the binary and login item; keeps config and log
+spacerun uninstall   # stop, remove the app, login item, PATH line, and Privacy & Security entries; keeps config and log
 spacerun --help
 ```
 
 | File | Purpose |
 |---|---|
-| `~/.local/bin/spacerun` | Installed binary |
+| `~/Applications/SpaceRun.app` | Installed app |
+| `~/.local/bin/spacerun` | Command-line link to the app |
 | `~/.config/spacerun/config.json` | Your shortcuts and settings |
 | `~/Library/LaunchAgents/local.spacerun.plist` | Login startup definition |
 | `~/Library/Logs/SpaceRun.log` | Startup messages and errors; keystrokes and usage are never logged |
 
-With `--all-users`, the binary is `/usr/local/bin/spacerun` and the login item is `/Library/LaunchAgents/local.spacerun.plist`; the config and log stay per user as above.
+With `--all-users`, the app is `/Applications/SpaceRun.app`, the command is `/usr/local/bin/spacerun`, and the login item is `/Library/LaunchAgents/local.spacerun.plist`; the config and log stay per user as above.
 
 A lock file next to the config prevents two copies from running at once. To test with a separate config, set `SPACERUN_CONFIG=/absolute/path/config.json`; an install made with this variable keeps using that path. Without it, the installed service always uses the config in the home folder of the user it runs as.
 
+**Uninstalling cleans up after itself.** `uninstall` removes SpaceRun's Accessibility and Input Monitoring entries from Privacy & Security, unregisters the app, and removes the `PATH` line it added. `uninstall --all-users` also removes the Input Monitoring entry of every user with a SpaceRun config. Only your config and log are kept; delete `~/.config/spacerun` and `~/Library/Logs/SpaceRun.log` to remove those too.
+
 ## Troubleshooting
 
-- **Nothing happens when I hold Space:** run `spacerun status` and check the log. Make sure Accessibility (and if needed Input Monitoring) is enabled for `~/.local/bin/spacerun`, and that SpaceLauncher is not running.
-- **Stopped working after reinstalling:** macOS treats the rebuilt binary as new. Run `spacerun start` and re-enable it in Accessibility (remove the old entry with − first if it is stale).
+- **Nothing happens when I hold Space:** run `spacerun status` and check the log. Make sure Accessibility (and if needed Input Monitoring) is enabled for SpaceRun, and that SpaceLauncher is not running.
+- **Stopped working after reinstalling:** macOS treats the rebuilt app as new. Run `spacerun start` and re-enable it in Accessibility (remove the old entry with − first if it is stale).
 - **"Already running":** another copy is using the same config; `spacerun stop` or quit the foreground `spacerun run`.
 - **An app shortcut does nothing:** `spacerun check` lists any app paths that no longer exist.
 
@@ -157,14 +166,16 @@ swift test
 swift build -c release
 ```
 
-The tests cover normal Space, fast typing, activation delay, unknown keys, modified shortcuts, the cheat sheet key, mouse/modifier passthrough, key release/repeat suppression, disabled apps, cancellation, config validation, and the editor's change tracking and save checks. Keyboard interception, the overlay, focus changes, default-browser opening, and login startup need a manual check with permissions granted.
+The tests cover normal Space, fast typing, activation delay, unknown keys, modified shortcuts, the cheat sheet key, mouse/modifier passthrough, key release/repeat suppression, disabled apps, cancellation, config validation, and the editor's saving, key conflicts, and undo. `SPACERUN_SNAPSHOT_DIR=/some/dir swift test --filter SnapshotTests` renders the windows to PNGs from `/some/dir/config.json` for a visual check. Keyboard interception, the overlay, focus changes, default-browser opening, and login startup need a manual check with permissions granted.
 
 Source layout (`Sources/SpaceRun`):
 
 - `LeaderState.swift`: the Space-key state machine (pure logic, unit tested).
 - `Daemon.swift`: event tap, app launching, config reload, permission wait.
 - `Overlay.swift`: the Space + ? cheat sheet.
-- `Editor.swift`: the `spacerun edit` window.
+- `Editor.swift`: the SpaceRun window, its add/edit sheet, and Settings.
+- `Daemon.swift` also holds the menu bar icon.
 - `Configuration.swift`: config model, defaults, validation, and key map.
 - `Service.swift`: install/start/stop via launchd.
 - `main.swift`: command-line commands.
+- `AppIconData.swift`: the app icon, generated from `Assets/icon-source.png` by `swift scripts/make-icon.swift`.
