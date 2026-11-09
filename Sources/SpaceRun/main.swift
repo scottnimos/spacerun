@@ -14,12 +14,14 @@ Getting started: spacerun install, then spacerun start, then spacerun edit.
   spacerun unbind KEY
   spacerun config                  Print config path
   spacerun check                   Validate config and app paths
-  spacerun install                 Install binary and login-startup definition
+  spacerun install                 Install binary and login-startup definition for you
+  sudo spacerun install --all-users
+                                   Install once for every user on this Mac (own config each)
   spacerun permissions             Request Accessibility access / open settings
   spacerun start                   Start/restart background service
   spacerun stop                    Stop background service for this login
   spacerun status                  Show background service state
-  spacerun uninstall               Remove service and binary; keep config
+  spacerun uninstall [--all-users] Remove service and binary; keep config
 
 Settings: ~/.config/spacerun/config.json (reloaded automatically).
 Hold Space and press ? to see all shortcuts.
@@ -32,8 +34,18 @@ func main() throws {
     if ["help", "--help", "-h"].contains(command) { print(help); return }
     let known = ["init", "edit", "run", "bind", "unbind", "config", "check", "install", "permissions", "start", "stop", "status", "uninstall"]
     guard known.contains(command) else { throw Failure("Unknown command '\(command)'. Use --help.") }
+    let allUsers = args.dropFirst().contains("--all-users")
+    if allUsers, !["install", "uninstall"].contains(command) { throw Failure("--all-users only applies to install and uninstall.") }
+    if command == "run", ProcessInfo.processInfo.environment["SPACERUN_SELF_LOG"] != nil {
+        // Shared launch agent: launchd cannot point at each user's home, so open this user's log here.
+        let log = Service.logFile
+        try? FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let fd = Darwin.open(log.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        if fd >= 0 { dup2(fd, STDOUT_FILENO); dup2(fd, STDERR_FILENO); Darwin.close(fd) }
+    }
     // Read-only and service-management commands do not create a config as a side effect.
-    if ["init", "edit", "run", "bind", "unbind", "install"].contains(command) { try ConfigFile.initialize() }
+    // An all-users install runs as root, so it must not create a config in root's home.
+    if ["init", "edit", "run", "bind", "unbind"].contains(command) || (command == "install" && !allUsers) { try ConfigFile.initialize() }
     switch command {
     case "init": print(ConfigFile.url.path)
     case "config": print(ConfigFile.url.path)
@@ -68,7 +80,7 @@ func main() throws {
         }
         if missing { throw Failure("Some app paths do not exist. Fix them with 'bind' or edit the config.") }
         print("Config valid. Accessibility: \(AXIsProcessTrusted() ? "granted" : "not granted for this process")")
-    case "install": try Service.install()
+    case "install": try allUsers ? Service.installShared() : Service.install()
     case "permissions":
         _ = AXIsProcessTrustedWithOptions([kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary)
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
@@ -76,7 +88,7 @@ func main() throws {
     case "start": try Service.start()
     case "stop": try Service.stop()
     case "status": try Service.status()
-    case "uninstall": try Service.uninstall()
+    case "uninstall": try allUsers ? Service.uninstallShared() : Service.uninstall()
     default: break
     }
 }

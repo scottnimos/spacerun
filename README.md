@@ -36,6 +36,17 @@ Requires macOS 13+ and Swift 5.9+ (Xcode or its command-line tools). No administ
 
 `install` copies the binary to `~/.local/bin/spacerun`, signs it locally, creates the example config if you do not have one (an existing config is never overwritten), and registers it to start at login. It then prints the next two steps. While you still have only the example shortcuts, `start` reminds you to run `spacerun edit`. `start` tells you whether the service is running, waiting for permission, or failed.
 
+### Several users on one Mac
+
+Steps 1–5 install SpaceRun for your account only. To install it once for every account, with each user keeping their own shortcuts:
+
+```sh
+swift build -c release
+sudo .build/release/spacerun install --all-users
+```
+
+This puts the binary in `/usr/local/bin/spacerun` and a login item in `/Library/LaunchAgents`, so SpaceRun starts in every user's login session. Each user has their own config (`~/.config/spacerun/config.json`, created on first start), lock file, and log (`~/Library/Logs/SpaceRun.log`). Each user then runs `/usr/local/bin/spacerun start` (or logs out and back in), followed by `/usr/local/bin/spacerun edit`. Allowing Accessibility needs an administrator password if the user is not an administrator. Remove a per-user install first (`~/.local/bin/spacerun uninstall`), because it takes priority for that user. To remove the all-users install: `sudo /usr/local/bin/spacerun uninstall --all-users`.
+
 **Updating:** pull or edit the code, then repeat step 2. macOS may ask for Accessibility access again after a reinstall, because the binary changed; `start` will wait for it.
 
 ## Using it
@@ -128,7 +139,9 @@ spacerun --help
 | `~/Library/LaunchAgents/local.spacerun.plist` | Login startup definition |
 | `~/Library/Logs/SpaceRun.log` | Startup messages and errors; keystrokes and usage are never logged |
 
-A lock file next to the config prevents two copies from running at once. To test with a separate config, set `SPACERUN_CONFIG=/absolute/path/config.json`; an install made with this variable keeps using that path.
+With `--all-users`, the binary is `/usr/local/bin/spacerun` and the login item is `/Library/LaunchAgents/local.spacerun.plist`; the config and log stay per user as above.
+
+A lock file next to the config prevents two copies from running at once. To test with a separate config, set `SPACERUN_CONFIG=/absolute/path/config.json`; an install made with this variable keeps using that path. Without it, the installed service always uses the config in the home folder of the user it runs as.
 
 ## Troubleshooting
 
